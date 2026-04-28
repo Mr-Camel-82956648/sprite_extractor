@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprite Extractor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+h1 { text-align: center; margin-bottom: 24px; color: #e94560; font-size: 28px; }
+.panel { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.panel h2 { font-size: 18px; margin-bottom: 14px; color: #e94560; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+label.field { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #aaa; }
+select, input[type=text], input[type=number], button {
+  padding: 8px 14px; border-radius: 6px; border: 1px solid #0f3460;
+  background: #0a0a23; color: #eee; font-size: 14px;
+}
+select { min-width: 200px; }
+input[type=number] { width: 80px; }
+input[type=text] { width: 140px; }
+button { background: #e94560; border: none; cursor: pointer; font-weight: 600; transition: background .2s; }
+button:hover { background: #c81e45; }
+button:disabled { background: #555; cursor: not-allowed; }
+.info { color: #aaa; font-size: 13px; margin-top: 8px; }
+
+.frames-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px; max-height: 500px; overflow-y: auto; padding: 4px;
+}
+.frame-item {
+  position: relative; cursor: pointer; border: 3px solid transparent;
+  border-radius: 8px; overflow: hidden; transition: border-color .15s, transform .15s;
+}
+.frame-item:hover { transform: scale(1.05); }
+.frame-item.selected { border-color: #e94560; }
+.frame-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.frame-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,.75); color: #eee; font-size: 11px; padding: 2px 6px; text-align: center;
+}
+.select-actions { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+.select-actions span { color: #aaa; font-size: 13px; }
+
+.preview-area { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.preview-canvas-wrap {
+  position: relative;
+  background: repeating-conic-gradient(#333 0% 25%, #444 0% 50%) 50%/20px 20px;
+  border-radius: 8px; overflow: hidden; display: inline-block;
+}
+.preview-canvas-wrap canvas { display: block; max-width: 400px; max-height: 400px; }
+.preview-controls { display: flex; flex-direction: column; gap: 10px; }
+.preview-controls label { font-size: 13px; color: #aaa; }
+.preview-controls input[type=range] { width: 200px; }
+
+.drop-zone {
+  border: 2px dashed #0f3460; border-radius: 12px; padding: 40px;
+  text-align: center; color: #888; font-size: 15px;
+  transition: border-color .2s, background .2s; cursor: pointer;
+  margin-top: 12px;
+}
+.drop-zone.dragover { border-color: #e94560; background: rgba(233,69,96,.1); }
+
+.output-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px; max-height: 400px; overflow-y: auto; margin-top: 14px;
+}
+.output-item {
+  background: repeating-conic-gradient(#333 0% 25%, #444 0% 50%) 50%/16px 16px;
+  border-radius: 8px; overflow: hidden;
+}
+.output-item img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
+.output-label { text-align: center; font-size: 11px; color: #aaa; padding: 2px; background: rgba(0,0,0,.6); }
+
+.hidden { display: none; }
+.naming-preview { color: #e94560; font-size: 13px; margin-top: 8px; font-family: monospace; }
+
+.norm-folders { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.norm-folder-item { background: #0a0a23; border-radius: 8px; padding: 14px; }
+.norm-folder-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.norm-folder-header .folder-name { font-weight: 600; color: #e94560; min-width: 180px; }
+.norm-slider-group { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #aaa; }
+.norm-slider-group input[type=range] { width: 140px; }
+.norm-slider-group .val { color: #e94560; font-family: monospace; min-width: 45px; text-align: right; }
+.norm-thumbs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; }
+.norm-thumb { width: 80px; height: 80px; border: 2px solid transparent; border-radius: 6px;
+  cursor: pointer; overflow: hidden; flex-shrink: 0; transition: border-color .15s;
+  background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50%/12px 12px; }
+.norm-thumb.active { border-color: #e94560; }
+.norm-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.norm-preview-area { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+  margin-top: 14px; padding: 14px; background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50%/20px 20px;
+  border-radius: 8px; min-height: 200px; justify-content: center; }
+.norm-preview-slot { display: flex; flex-direction: column; align-items: center; }
+.norm-preview-slot canvas { border: 1px solid #333; }
+.norm-preview-slot .slot-label { font-size: 11px; color: #aaa; margin-top: 4px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Sprite Extractor</h1>
+
+<!-- Step 1: Video & Extract -->
+<div class="panel">
+  <h2>1. 选择视频 & 抽帧</h2>
+  <div class="row">
+    <select id="videoSelect"><option value="">加载中...</option></select>
+    <label class="field">每 <input type="number" id="everyN" value="1" min="1" max="30"> 帧取1帧</label>
+    <button id="extractBtn" onclick="extractFrames()">抽帧</button>
+  </div>
+  <div class="info" id="videoInfo"></div>
+</div>
+
+<!-- Step 2: Frame Selection -->
+<div class="panel hidden" id="framePanel">
+  <h2>2. 选择帧</h2>
+  <div class="select-actions">
+    <button onclick="selectAll()">全选</button>
+    <button onclick="selectNone()">取消全选</button>
+    <button onclick="selectRange()">范围选择</button>
+    <span id="selectionCount">已选 0 帧</span>
+    <span style="margin-left:auto; color:#666; font-size:12px;">点击选择 | Shift+点击范围选择</span>
+  </div>
+  <div class="frames-grid" id="framesGrid"></div>
+</div>
+
+<!-- Step 3: Preview -->
+<div class="panel hidden" id="previewPanel">
+  <h2>3. 循环预览</h2>
+  <div class="preview-area">
+    <div class="preview-canvas-wrap">
+      <canvas id="previewCanvas"></canvas>
+    </div>
+    <div class="preview-controls">
+      <div>
+        <label>播放速度: <span id="fpsLabel">12</span> FPS</label><br>
+        <input type="range" id="fpsSlider" min="1" max="30" value="12" oninput="updateFps()">
+      </div>
+      <button onclick="togglePreview()" id="playBtn">播放</button>
+      <div>
+        <label>预览源:</label><br>
+        <label><input type="radio" name="previewMode" value="original" checked onchange="switchPreviewMode()"> 原图</label>
+        <label><input type="radio" name="previewMode" value="nobg" onchange="switchPreviewMode()"> 抠图后</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Step 4: Naming & Export -->
+<div class="panel hidden" id="exportPanel">
+  <h2>4. 命名 & 导出</h2>
+  <div class="row" style="margin-bottom:10px;">
+    <label class="field">角色 <input type="text" id="charName" value="player1" oninput="updateNamingPreview()"></label>
+    <label class="field">方向 <input type="text" id="direction" value="front_right" oninput="updateNamingPreview()"></label>
+    <label class="field">动作 <input type="text" id="action" value="run" oninput="updateNamingPreview()"></label>
+    <button onclick="exportFrames()">下载 ZIP</button>
+  </div>
+  <div class="naming-preview" id="namingPreview"></div>
+  <div class="info">下载后上传到抠图网站批量处理，完成后在下方导入</div>
+</div>
+
+<!-- Step 5: Import -->
+<div class="panel hidden" id="importPanel">
+  <h2>5. 导入抠图结果</h2>
+  <div class="drop-zone" id="dropZone">
+    将抠图后的 PNG 文件拖到这里，或点击选择文件
+    <input type="file" id="importInput" multiple accept="image/png,image/webp" style="display:none">
+  </div>
+  <div class="info hidden" id="importStatus"></div>
+  <div class="output-grid hidden" id="outputGrid"></div>
+</div>
+
+<!-- Step 6: Normalize Size -->
+<div class="panel" id="normPanel">
+  <h2>6. 尺寸统一</h2>
+  <div class="row">
+    <button onclick="loadNormFolders()">刷新文件夹列表</button>
+    <label class="field">画布尺寸
+      <input type="range" id="canvasSize" min="128" max="2048" step="1" value="960" oninput="onCanvasSizeChange()">
+      <span id="canvasSizeVal" style="color:#e94560;font-family:monospace;min-width:40px;">960</span>
+    </label>
+    <button onclick="applyNormalize()" id="normApplyBtn">应用缩放并导出</button>
+  </div>
+  <div class="info">从 output/ 中选择同一角色的多个动作文件夹，为每个动作选择一张代表帧，调整缩放使角色大小一致。脚底对齐画布底部。</div>
+  <div class="norm-folders" id="normFolders"></div>
+  <div class="norm-preview-area hidden" id="normPreview"></div>
+  <div class="info hidden" id="normStatus"></div>
+</div>
+
+</div>
+
+<script>
+let allFrames = [];
+let selectedSet = new Set();
+let lastClickedIdx = -1;
+let currentVideo = "";
+let previewImages = [];
+let previewTimer = null;
+let previewIdx = 0;
+let importedReady = false;
+let importedFolder = "";
+let importedFiles = [];
+let previewMode = "original";
+
+async function init() {
+  const res = await fetch("/api/videos");
+  const videos = await res.json();
+  const sel = document.getElementById("videoSelect");
+  sel.innerHTML = "";
+  if (videos.length === 0) {
+    sel.innerHTML = '<option value="">无视频文件</option>';
+    return;
+  }
+  videos.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v.filename;
+    opt.textContent = `${v.name} (${v.width}x${v.height}, ${v.fps}fps, ${v.frame_count}帧)`;
+    sel.appendChild(opt);
+  });
+  sel.onchange = () => {
+    const v = videos.find(x => x.filename === sel.value);
+    if (v) {
+      document.getElementById("videoInfo").textContent =
+        `分辨率: ${v.width}x${v.height} | FPS: ${v.fps} | 总帧数: ${v.frame_count} | 时长: ${(v.frame_count / v.fps).toFixed(2)}s`;
+    }
+  };
+  sel.dispatchEvent(new Event("change"));
+}
+
+// === Extract ===
+async function extractFrames() {
+  const video = document.getElementById("videoSelect").value;
+  const everyN = parseInt(document.getElementById("everyN").value) || 1;
+  if (!video) return;
+
+  const btn = document.getElementById("extractBtn");
+  btn.disabled = true;
+  btn.textContent = "抽帧中...";
+
+  const res = await fetch("/api/extract-frames", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ video, every_n: everyN }),
+  });
+  const data = await res.json();
+
+  btn.disabled = false;
+  btn.textContent = "抽帧";
+
+  currentVideo = data.video;
+  allFrames = data.frames;
+  selectedSet = new Set(allFrames.map((_, i) => i));
+  importedReady = false;
+
+  renderFrames();
+  updateSelectionCount();
+  updateNamingPreview();
+  ["framePanel", "previewPanel", "exportPanel", "importPanel"].forEach(
+    id => document.getElementById(id).classList.remove("hidden")
+  );
+  document.getElementById("outputGrid").classList.add("hidden");
+  document.getElementById("importStatus").classList.add("hidden");
+
+  startPreview();
+}
+
+// === Frame Grid ===
+function renderFrames() {
+  const grid = document.getElementById("framesGrid");
+  grid.innerHTML = "";
+  allFrames.forEach((f, i) => {
+    const div = document.createElement("div");
+    div.className = "frame-item" + (selectedSet.has(i) ? " selected" : "");
+    div.innerHTML = `<img src="/frames/${currentVideo}/${f.filename}" loading="lazy"><div class="frame-label">#${f.index} ${f.time}s</div>`;
+    div.onclick = (e) => toggleFrame(i, e);
+    grid.appendChild(div);
+  });
+}
+
+function toggleFrame(idx, e) {
+  if (e && e.shiftKey && lastClickedIdx >= 0) {
+    const lo = Math.min(lastClickedIdx, idx);
+    const hi = Math.max(lastClickedIdx, idx);
+    const shouldSelect = !selectedSet.has(idx);
+    for (let i = lo; i <= hi; i++) {
+      if (shouldSelect) selectedSet.add(i); else selectedSet.delete(i);
+    }
+  } else {
+    if (selectedSet.has(idx)) selectedSet.delete(idx); else selectedSet.add(idx);
+  }
+  lastClickedIdx = idx;
+  renderFrames();
+  updateSelectionCount();
+  updateNamingPreview();
+  if (previewTimer) { stopPreview(); startPreview(); }
+}
+
+function selectAll() { allFrames.forEach((_, i) => selectedSet.add(i)); renderFrames(); updateSelectionCount(); updateNamingPreview(); }
+function selectNone() { selectedSet.clear(); renderFrames(); updateSelectionCount(); updateNamingPreview(); }
+function selectRange() {
+  const input = prompt("输入帧范围（如 0-10, 20-30）:");
+  if (!input) return;
+  selectedSet.clear();
+  input.split(",").forEach(part => {
+    const [a, b] = part.trim().split("-").map(Number);
+    if (!isNaN(a) && !isNaN(b)) {
+      for (let i = 0; i < allFrames.length; i++) {
+        if (allFrames[i].index >= a && allFrames[i].index <= b) selectedSet.add(i);
+      }
+    }
+  });
+  renderFrames(); updateSelectionCount(); updateNamingPreview();
+}
+
+function updateSelectionCount() {
+  document.getElementById("selectionCount").textContent = `已选 ${selectedSet.size} 帧`;
+}
+
+function getSelectedFrames() {
+  return [...selectedSet].sort((a, b) => a - b).map(i => allFrames[i]);
+}
+
+// === Naming Preview ===
+function updateNamingPreview() {
+  const c = document.getElementById("charName").value || "player1";
+  const d = document.getElementById("direction").value || "front";
+  const a = document.getElementById("action").value || "idle";
+  const n = selectedSet.size;
+  const el = document.getElementById("namingPreview");
+  if (n === 0) { el.textContent = "（请先选择帧）"; return; }
+  const first = `${c}_${d}_${a}_01.png`;
+  const last = `${c}_${d}_${a}_${String(n).padStart(2, "0")}.png`;
+  el.textContent = n === 1 ? `文件: ${first}` : `文件: ${first} ~ ${last} (共 ${n} 张)`;
+}
+
+// === Export ===
+async function exportFrames() {
+  const selected = getSelectedFrames();
+  if (selected.length === 0) { alert("请先选择帧"); return; }
+
+  const c = document.getElementById("charName").value || "player1";
+  const d = document.getElementById("direction").value || "front";
+  const a = document.getElementById("action").value || "idle";
+
+  const res = await fetch("/api/export-frames", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      video: currentVideo,
+      frames: selected.map(f => f.filename),
+      char_name: c, direction: d, action: a,
+    }),
+  });
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${c}_${d}_${a}.zip`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// === Preview ===
+function getPreviewSrc(frame) {
+  if (previewMode === "nobg" && importedReady && importedFiles.length > 0) {
+    return `/output/${importedFolder}/${importedFiles[0]}?t=0`;
+  }
+  return `/frames/${currentVideo}/${frame.filename}`;
+}
+
+function startPreview() {
+  const selected = getSelectedFrames();
+  if (selected.length === 0) return;
+
+  if (previewMode === "nobg" && importedReady) {
+    previewImages = importedFiles.map(f => {
+      const img = new Image();
+      img.src = `/output/${importedFolder}/${f}?t=${Date.now()}`;
+      return img;
+    });
+  } else {
+    previewImages = selected.map(f => {
+      const img = new Image();
+      img.src = `/frames/${currentVideo}/${f.filename}`;
+      return img;
+    });
+  }
+  previewIdx = 0;
+
+  const canvas = document.getElementById("previewCanvas");
+  const fps = parseInt(document.getElementById("fpsSlider").value);
+  document.getElementById("playBtn").textContent = "暂停";
+
+  if (previewTimer) clearInterval(previewTimer);
+  previewTimer = setInterval(() => {
+    if (previewImages.length === 0) return;
+    const img = previewImages[previewIdx % previewImages.length];
+    if (img.complete && img.naturalWidth) {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.style.maxWidth = "400px";
+      canvas.style.maxHeight = "400px";
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+    }
+    previewIdx++;
+  }, 1000 / fps);
+}
+
+function stopPreview() {
+  if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+  document.getElementById("playBtn").textContent = "播放";
+}
+
+function togglePreview() { if (previewTimer) stopPreview(); else startPreview(); }
+
+function updateFps() {
+  document.getElementById("fpsLabel").textContent = document.getElementById("fpsSlider").value;
+  if (previewTimer) { stopPreview(); startPreview(); }
+}
+
+function switchPreviewMode() {
+  previewMode = document.querySelector('input[name=previewMode]:checked').value;
+  if (previewTimer) { stopPreview(); startPreview(); }
+}
+
+// === Import ===
+const dropZone = document.getElementById("dropZone");
+const importInput = document.getElementById("importInput");
+
+dropZone.addEventListener("click", () => importInput.click());
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
+  handleImportFiles(e.dataTransfer.files);
+});
+importInput.addEventListener("change", e => handleImportFiles(e.target.files));
+
+async function handleImportFiles(fileList) {
+  if (!fileList || fileList.length === 0) return;
+
+  const c = document.getElementById("charName").value || "player1";
+  const d = document.getElementById("direction").value || "front";
+  const a = document.getElementById("action").value || "idle";
+
+  const status = document.getElementById("importStatus");
+  status.classList.remove("hidden");
+  status.textContent = `上传中... 0/${fileList.length}`;
+
+  const formData = new FormData();
+  formData.append("char_name", c);
+  formData.append("direction", d);
+  formData.append("action", a);
+  for (const f of fileList) {
+    formData.append("files", f);
+  }
+
+  const res = await fetch("/api/import-frames", { method: "POST", body: formData });
+  const data = await res.json();
+
+  importedReady = true;
+  importedFolder = data.folder;
+  importedFiles = data.files;
+
+  status.textContent = `导入完成！共 ${data.saved} 张，保存在 output/${data.folder}/`;
+
+  const grid = document.getElementById("outputGrid");
+  grid.classList.remove("hidden");
+  grid.innerHTML = "";
+  data.files.forEach(f => {
+    const div = document.createElement("div");
+    div.className = "output-item";
+    div.innerHTML = `<img src="/output/${data.folder}/${f}?t=${Date.now()}" loading="lazy"><div class="output-label">${f}</div>`;
+    grid.appendChild(div);
+  });
+
+  document.querySelector('input[name=previewMode][value=nobg]').checked = true;
+  previewMode = "nobg";
+  if (previewTimer) { stopPreview(); startPreview(); } else { startPreview(); }
+}
+
+// === Normalize ===
+let normFolders = [];
+let normState = {};
+
+function onCanvasSizeChange() {
+  document.getElementById("canvasSizeVal").textContent = document.getElementById("canvasSize").value;
+  renderNormPreview();
+}
+
+async function loadNormFolders() {
+  const res = await fetch("/api/output-folders");
+  normFolders = await res.json();
+  renderNormFolders();
+}
+
+function renderNormFolders() {
+  const container = document.getElementById("normFolders");
+  container.innerHTML = "";
+  normFolders.forEach(folder => {
+    if (!normState[folder.name]) {
+      normState[folder.name] = { enabled: false, scale: 1.0, offsetX: 0, offsetY: 0, refFrame: folder.files[0] };
+    }
+    const st = normState[folder.name];
+    const div = document.createElement("div");
+    div.className = "norm-folder-item";
+    div.innerHTML = `
+      <div class="norm-folder-header">
+        <label><input type="checkbox" ${st.enabled ? "checked" : ""} onchange="toggleNormFolder('${folder.name}', this.checked)"></label>
+        <span class="folder-name">${folder.name}</span>
+        <span style="color:#888;font-size:12px;">${folder.count} 张</span>
+      </div>
+      <div class="norm-folder-header">
+        <div class="norm-slider-group">
+          缩放 <input type="range" min="0.1" max="3" step="0.01" value="${st.scale}"
+            oninput="updateNormParam('${folder.name}','scale',this.value)">
+          <span class="val" id="ns_scale_${folder.name}">${st.scale.toFixed(2)}</span>
+        </div>
+        <div class="norm-slider-group">
+          X <input type="range" min="-500" max="500" step="1" value="${st.offsetX}"
+            oninput="updateNormParam('${folder.name}','offsetX',this.value)">
+          <span class="val" id="ns_offsetX_${folder.name}">${st.offsetX}</span>
+        </div>
+        <div class="norm-slider-group">
+          Y <input type="range" min="-500" max="500" step="1" value="${st.offsetY}"
+            oninput="updateNormParam('${folder.name}','offsetY',this.value)">
+          <span class="val" id="ns_offsetY_${folder.name}">${st.offsetY}</span>
+        </div>
+      </div>
+      <div class="norm-thumbs" id="normThumbs_${folder.name}"></div>
+    `;
+    container.appendChild(div);
+
+    const thumbsDiv = div.querySelector(`#normThumbs_${folder.name}`);
+    folder.files.forEach(f => {
+      const t = document.createElement("div");
+      t.className = "norm-thumb" + (f === st.refFrame ? " active" : "");
+      t.innerHTML = `<img src="/output/${folder.name}/${f}" loading="lazy">`;
+      t.onclick = () => { st.refFrame = f; renderNormFolders(); renderNormPreview(); };
+      thumbsDiv.appendChild(t);
+    });
+  });
+}
+
+function toggleNormFolder(name, checked) {
+  normState[name].enabled = checked;
+  renderNormPreview();
+}
+
+function updateNormParam(name, param, val) {
+  const v = parseFloat(val);
+  normState[name][param] = v;
+  const label = document.getElementById(`ns_${param}_${name}`);
+  if (label) label.textContent = param === "scale" ? v.toFixed(2) : Math.round(v);
+  renderNormPreview();
+}
+
+function renderNormPreview() {
+  const area = document.getElementById("normPreview");
+  const canvasSize = parseInt(document.getElementById("canvasSize").value) || 960;
+  const enabled = normFolders.filter(f => normState[f.name] && normState[f.name].enabled);
+
+  if (enabled.length === 0) { area.classList.add("hidden"); return; }
+  area.classList.remove("hidden");
+  area.innerHTML = "";
+
+  const displaySize = Math.min(300, canvasSize);
+
+  enabled.forEach(folder => {
+    const st = normState[folder.name];
+    const slot = document.createElement("div");
+    slot.className = "norm-preview-slot";
+
+    const canvas = document.createElement("canvas");
+    canvas.width = displaySize;
+    canvas.height = displaySize;
+    slot.appendChild(canvas);
+
+    const label = document.createElement("div");
+    label.className = "slot-label";
+    label.textContent = `${folder.name} (x${st.scale.toFixed(2)}, ${st.offsetX}, ${st.offsetY})`;
+    slot.appendChild(label);
+    area.appendChild(slot);
+
+    const img = new Image();
+    img.onload = () => {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, displaySize, displaySize);
+      const ratio = displaySize / canvasSize;
+      const drawW = img.naturalWidth * st.scale * ratio;
+      const drawH = img.naturalHeight * st.scale * ratio;
+      const x = (displaySize - drawW) / 2 + st.offsetX * ratio;
+      const y = (displaySize - drawH) / 2 + st.offsetY * ratio;
+      ctx.drawImage(img, x, y, drawW, drawH);
+    };
+    img.src = `/output/${folder.name}/${st.refFrame}?t=${Date.now()}`;
+  });
+}
+
+async function applyNormalize() {
+  const canvasSize = parseInt(document.getElementById("canvasSize").value) || 960;
+  const enabled = normFolders.filter(f => normState[f.name] && normState[f.name].enabled);
+  if (enabled.length === 0) { alert("请先勾选至少一个文件夹"); return; }
+
+  const btn = document.getElementById("normApplyBtn");
+  const status = document.getElementById("normStatus");
+  btn.disabled = true;
+  btn.textContent = "处理中...";
+  status.classList.remove("hidden");
+  status.textContent = "正在缩放所有帧...";
+
+  const folders = enabled.map(f => ({
+    folder: f.name,
+    scale: normState[f.name].scale,
+    offset_x: normState[f.name].offsetX,
+    offset_y: normState[f.name].offsetY,
+  }));
+
+  const res = await fetch("/api/apply-normalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ canvas_size: canvasSize, folders }),
+  });
+  const data = await res.json();
+
+  btn.disabled = false;
+  btn.textContent = "应用缩放并导出";
+
+  const lines = Object.entries(data).map(([k, v]) => `${k} → ${v.output_folder}/ (${v.processed} 张)`);
+  status.textContent = "完成！" + lines.join(" | ");
+
+  loadNormFolders();
+}
+
+init();
+loadNormFolders();
+</body>
+</html>

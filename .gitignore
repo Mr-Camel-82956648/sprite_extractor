@@ -1,0 +1,6 @@
+venv/
+frames/
+export/
+output/
+__pycache__/
+*.pyc
