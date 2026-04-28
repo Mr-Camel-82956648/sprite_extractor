@@ -182,7 +182,7 @@ button:disabled { background: #555; cursor: not-allowed; }
     </label>
     <button onclick="applyNormalize()" id="normApplyBtn">应用缩放并导出</button>
   </div>
-  <div class="info">从 output/ 中选择同一角色的多个动作文件夹，为每个动作选择一张代表帧，调整缩放使角色大小一致。脚底对齐画布底部。</div>
+  <div class="info">从 output/ 中选择同一角色的多个动作文件夹，为每个动作选择一张代表帧，调整缩放和 XY 偏移使角色大小位置一致。</div>
   <div class="norm-folders" id="normFolders"></div>
   <div class="norm-preview-area hidden" id="normPreview"></div>
   <div class="info hidden" id="normStatus"></div>
@@ -639,5 +639,6 @@ async function applyNormalize() {
 
 init();
 loadNormFolders();
+</script>
 </body>
 </html>

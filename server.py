@@ -146,7 +146,7 @@ def serve_output(filepath):
 def list_output_folders():
     folders = []
     for d in sorted(OUTPUT_DIR.iterdir()):
-        if not d.is_dir():
+        if not d.is_dir() or d.name.endswith("_normalized"):
             continue
         pngs = sorted(f.name for f in d.glob("*.png"))
         if not pngs:
