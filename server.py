@@ -1,4 +1,6 @@
 import io
+import hashlib
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -17,6 +19,41 @@ OUTPUT_DIR = BASE_DIR / "output"
 
 for d in [SOURCE_DIR, FRAMES_DIR, EXPORT_DIR, OUTPUT_DIR]:
     d.mkdir(exist_ok=True)
+
+
+SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def make_storage_key(name: str) -> str:
+    """Map arbitrary names to an ASCII-safe folder key for Windows/OpenCV."""
+    if SAFE_NAME_RE.fullmatch(name):
+        return name
+
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name.encode("ascii", "ignore").decode("ascii"))
+    ascii_name = ascii_name.strip("-_.") or "video"
+    digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:12]
+    return f"{ascii_name}_{digest}"
+
+
+def imwrite_compat(path: Path, image: np.ndarray) -> bool:
+    """Write images through imencode/tofile so Windows unicode paths work reliably."""
+    suffix = path.suffix or ".png"
+    ok, encoded = cv2.imencode(suffix, image)
+    if not ok:
+        return False
+    encoded.tofile(str(path))
+    return True
+
+
+def imread_compat(path: Path, flags: int) -> np.ndarray | None:
+    """Read images through fromfile/imdecode so Windows unicode paths work reliably."""
+    try:
+        data = np.fromfile(str(path), dtype=np.uint8)
+    except OSError:
+        return None
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, flags)
 
 
 @app.route("/")
@@ -53,7 +90,8 @@ def extract_frames():
         return jsonify({"error": "Video not found"}), 404
 
     stem = video_path.stem
-    out_dir = FRAMES_DIR / stem
+    storage_key = make_storage_key(stem)
+    out_dir = FRAMES_DIR / storage_key
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for f in out_dir.glob("*.png"):
@@ -70,16 +108,22 @@ def extract_frames():
             break
         if idx % every_n == 0:
             fname = f"frame_{idx:04d}.png"
-            cv2.imwrite(str(out_dir / fname), frame)
-            frames.append({
-                "index": idx,
-                "filename": fname,
-                "time": round(idx / fps, 3) if fps else 0,
-            })
+            if imwrite_compat(out_dir / fname, frame):
+                frames.append({
+                    "index": idx,
+                    "filename": fname,
+                    "time": round(idx / fps, 3) if fps else 0,
+                })
         idx += 1
 
     cap.release()
-    return jsonify({"video": stem, "total_frames": idx, "saved": len(frames), "frames": frames})
+    return jsonify({
+        "video": storage_key,
+        "source_video": stem,
+        "total_frames": idx,
+        "saved": len(frames),
+        "frames": frames,
+    })
 
 
 @app.route("/api/export-frames", methods=["POST"])
@@ -179,7 +223,7 @@ def apply_normalize():
 
         processed = []
         for png in sorted(src_dir.glob("*.png")):
-            img = cv2.imread(str(png), cv2.IMREAD_UNCHANGED)
+            img = imread_compat(png, cv2.IMREAD_UNCHANGED)
             if img is None:
                 continue
 
@@ -204,8 +248,8 @@ def apply_normalize():
             sy2 = sy1 + (y2 - y1)
             canvas[y1:y2, x1:x2] = scaled[sy1:sy2, sx1:sx2]
 
-            cv2.imwrite(str(dst_dir / png.name), canvas)
-            processed.append(png.name)
+            if imwrite_compat(dst_dir / png.name, canvas):
+                processed.append(png.name)
 
         results[folder_name] = {
             "output_folder": folder_name + "_normalized",
